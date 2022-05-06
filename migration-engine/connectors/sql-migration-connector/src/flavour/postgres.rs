@@ -5,6 +5,7 @@ use crate::{
     sql_renderer::IteratorJoin,
     SqlFlavour,
 };
+#[allow(unused_imports)] // wtf, this one is unused on CI, not locally
 use datamodel::common::preview_features::PreviewFeature;
 use enumflags2::BitFlags;
 use indoc::indoc;
