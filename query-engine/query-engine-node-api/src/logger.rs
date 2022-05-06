@@ -46,7 +46,7 @@ impl Logger {
             is_sql_query.or(is_mongo_query).or(log_level).boxed()
         } else {
             // Filter based in the defined log level
-            log_level.boxed()
+            FilterExt::boxed(log_level)
         };
 
         let layer = CallbackLayer::new(log_callback.clone()).with_filter(filters);
@@ -93,7 +93,7 @@ impl Logger {
             is_sql_query.or(is_mongo_query).or(self.log_level).boxed()
         } else {
             // Filter based in the defined log level
-            self.log_level.boxed()
+            FilterExt::boxed(self.log_level)
         };
 
         let layer = CallbackLayer::new(self.log_callback.clone()).with_filter(filters);
