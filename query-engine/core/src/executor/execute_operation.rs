@@ -2,6 +2,7 @@ use super::pipeline::QueryPipeline;
 use crate::{IrSerializer, Operation, QueryGraph, QueryGraphBuilder, QueryInterpreter, ResponseData};
 use connector::{Connection, ConnectionLike, Connector};
 use futures::future;
+use metrics::increment_counter;
 use schema::QuerySchemaRef;
 use tracing_futures::WithSubscriber;
 
@@ -13,6 +14,8 @@ pub async fn execute_single_operation(
 ) -> crate::Result<ResponseData> {
     let interpreter = QueryInterpreter::new(conn);
     let (query_graph, serializer) = QueryGraphBuilder::new(query_schema.clone()).build(operation.clone())?;
+
+    increment_counter!("query_total_operations");
 
     QueryPipeline::new(query_graph, interpreter, serializer)
         .execute(trace_id)
@@ -33,6 +36,7 @@ pub async fn execute_many_operations(
     let mut results = Vec::with_capacity(queries.len());
 
     for (query_graph, serializer) in queries {
+        increment_counter!("query_total_operations");
         let interpreter = QueryInterpreter::new(conn);
         let result = QueryPipeline::new(query_graph, interpreter, serializer)
             .execute(trace_id.clone())
@@ -69,6 +73,7 @@ pub async fn execute_many_self_contained<C: Connector + Send + Sync>(
     for op in operations {
         match QueryGraphBuilder::new(query_schema.clone()).build(op.clone()) {
             Ok((graph, serializer)) => {
+                increment_counter!("query_total_operations");
                 let conn = connector.get_connection().await?;
 
                 futures.push(tokio::spawn(
@@ -123,6 +128,7 @@ async fn execute_on(
     serializer: IrSerializer,
     trace_id: Option<String>,
 ) -> crate::Result<ResponseData> {
+    increment_counter!("query_total_operations");
     let interpreter = QueryInterpreter::new(conn);
     let result = QueryPipeline::new(graph, interpreter, serializer)
         .execute(trace_id)
