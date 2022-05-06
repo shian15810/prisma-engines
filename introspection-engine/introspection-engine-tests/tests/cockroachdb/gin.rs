@@ -34,7 +34,7 @@ async fn gin_preview_disabled(api: &TestApi) -> TestResult {
     Ok(())
 }
 
-#[test_connector(tags(CockroachDb), preview_features("extendedIndexes", "cockroachDb"))]
+#[test_connector(tags(CockroachDb), preview_features("cockroachDb"))]
 async fn gin_unsupported_type(api: &TestApi) -> TestResult {
     let schema_name = api.schema_name();
 
@@ -68,7 +68,7 @@ async fn gin_unsupported_type(api: &TestApi) -> TestResult {
     Ok(())
 }
 
-#[test_connector(tags(CockroachDb), preview_features("extendedIndexes", "cockroachDb"))]
+#[test_connector(tags(CockroachDb), preview_features("cockroachDb"))]
 async fn array_ops(api: &TestApi) -> TestResult {
     let schema_name = api.schema_name();
 
@@ -102,7 +102,7 @@ async fn array_ops(api: &TestApi) -> TestResult {
     Ok(())
 }
 
-#[test_connector(tags(CockroachDb), preview_features("extendedIndexes", "cockroachDb"))]
+#[test_connector(tags(CockroachDb), preview_features("cockroachDb"))]
 async fn jsonb_ops(api: &TestApi) -> TestResult {
     let schema_name = api.schema_name();
 

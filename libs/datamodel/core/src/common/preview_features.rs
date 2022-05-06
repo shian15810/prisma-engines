@@ -79,7 +79,6 @@ pub const GENERATOR: FeatureMap = FeatureMap::new()
         FullTextSearch,
         FullTextIndex,
         DataProxy,
-        ExtendedIndexes,
         Cockroachdb,
         Tracing,
         ImprovedQueryRaw,
@@ -87,6 +86,7 @@ pub const GENERATOR: FeatureMap = FeatureMap::new()
     .with_deprecated(&[
         AtomicNumberOperations,
         AggregateApi,
+        ExtendedIndexes,
         Middlewares,
         NamedConstraints,
         NativeTypes,
