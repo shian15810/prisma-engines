@@ -30,15 +30,13 @@ mod formatters;
 mod recorder;
 mod registry;
 
-use metrics::{describe_counter, describe_gauge, describe_histogram};
+use metrics::{absolute_counter, describe_counter, describe_gauge, describe_histogram, gauge};
 use recorder::*;
 pub use registry::MetricRegistry;
 
 // At the moment the histogram is only used for timings. So the bounds are hard coded here
 // The buckets are for ms
-pub(crate) const HISTOGRAM_BOUNDS: [f64; 13] = [
-    0.0, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0,
-];
+pub(crate) const HISTOGRAM_BOUNDS: [f64; 10] = [0.0, 1.0, 5.0, 10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0, 50000.0];
 // We need a list of acceptable metrics we want to expose, we don't want to accidentally expose metrics
 // that a different library have or unintended information
 const ACCEPT_LIST: &'static [&'static str] = &[
@@ -71,16 +69,23 @@ fn describe_metrics() {
     describe_gauge!("pool_wait_count", "The number of workers waiting for a connection");
     describe_gauge!("query_active_transactions", "The number of active transactions");
 
+    gauge!("pool_active_connections", 0.0);
+    gauge!("pool_idle_connections", 0.0);
+    gauge!("pool_wait_count", 0.0);
+    gauge!("query_active_transactions", 0.0);
+
     describe_histogram!("pool_wait_duration", "The wait time for a worker to get a connection.");
     describe_histogram!(
-        "query.total_elapsed_time",
+        "query_total_elapsed_time",
         "The execution time for all queries executed"
     );
 
     describe_counter!("query_total_queries", "The total number of queries executed");
     describe_counter!("query_total_operations", "The total number of operations executed");
-}
 
+    absolute_counter!("query_total_queries", 0);
+    absolute_counter!("query_total_operations", 0);
+}
 fn set_recorder() {
     let recorder = MetricRecorder::default();
     metrics::set_boxed_recorder(Box::new(recorder)).unwrap();
@@ -89,12 +94,13 @@ fn set_recorder() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use indexmap::IndexMap;
     use metrics::{
         absolute_counter, decrement_gauge, describe_counter, describe_gauge, describe_histogram, gauge, histogram,
         increment_counter, increment_gauge, register_counter, register_gauge, register_histogram,
     };
     use serde_json::json;
+    use std::collections::HashMap;
+    use std::time::Duration;
     use tracing::instrument::WithSubscriber;
     use tracing::Dispatch;
     use tracing_subscriber::layer::SubscriberExt;
@@ -228,30 +234,27 @@ mod tests {
             let dispatch = Dispatch::new(tracing_subscriber::Registry::default().with(metrics.clone()));
             async {
                 let hist = register_histogram!("test_histogram");
-                hist.record(9.0);
+                hist.record(Duration::from_millis(9));
 
-                histogram!("test_histogram", 100.0);
-                histogram!("test_histogram", 0.1);
+                histogram!("test_histogram", Duration::from_millis(100));
+                histogram!("test_histogram", Duration::from_millis(1));
 
-                histogram!("test_histogram", 1999.0);
-                histogram!("test_histogram", 3999.0);
-                histogram!("test_histogram", 610.0);
+                histogram!("test_histogram", Duration::from_millis(1999));
+                histogram!("test_histogram", Duration::from_millis(3999));
+                histogram!("test_histogram", Duration::from_millis(610));
 
                 let hist = metrics.histogram_values("test_histogram").unwrap();
                 let expected: Vec<(f64, u64)> = Vec::from([
                     (0.0, 0),
                     (1.0, 1),
-                    (2.0, 1),
                     (5.0, 1),
                     (10.0, 2),
-                    (20.0, 2),
                     (50.0, 2),
                     (100.0, 3),
-                    (200.0, 3),
                     (500.0, 3),
                     (1000.0, 4),
-                    (2000.0, 5),
                     (5000.0, 6),
+                    (50000.0, 6),
                 ]);
 
                 assert_eq!(hist.buckets(), expected);
@@ -304,7 +307,7 @@ mod tests {
                     "histograms": []
                 });
 
-                assert_eq!(metrics.to_json(IndexMap::default()), empty);
+                assert_eq!(metrics.to_json(Default::default()), empty);
 
                 absolute_counter!("counter_1", 4, "label" => "one");
                 let _ = describe_counter!("counter_2", "this is a description for counter 2");
@@ -316,11 +319,11 @@ mod tests {
 
                 describe_histogram!("histogram_1", "a description for histogram");
                 let hist = register_histogram!("histogram_1", "label" => "one", "hist_two" => "two");
-                hist.record(9.0);
+                hist.record(Duration::from_millis(9));
 
-                histogram!("histogram_2", 1000.0);
+                histogram!("histogram_2", Duration::from_millis(1000));
 
-                let json = metrics.to_json(IndexMap::default());
+                let json = metrics.to_json(Default::default());
                 let expected = json!({
                     "counters":[{
                         "key":"counter_1",
@@ -348,7 +351,7 @@ mod tests {
                         "key":"histogram_1",
                         "labels":{"label":"one","hist_two":"two"},
                         "value":{
-                            "buckets":[[0.0,0],[1.0,0],[2.0,0],[5.0,0],[10.0,1],[20.0,1],[50.0,1],[100.0,1],[200.0,1],[500.0,1],[1000.0,1],[2000.0,1],[5000.0,1]],
+                            "buckets": [[0.0,0],[1.0,0],[5.0,0],[10.0,1],[50.0,1],[100.0,1],[500.0,1],[1000.0,1],[5000.0,1],[50000.0,1]],
                             "sum":9.0,
                             "count":1
                         },
@@ -356,7 +359,7 @@ mod tests {
                             "key":"histogram_2",
                             "labels":{},
                             "value":{
-                                "buckets":[[0.0,0],[1.0,0],[2.0,0],[5.0,0],[10.0,0],[20.0,0],[50.0,0],[100.0,0],[200.0,0],[500.0,0],[1000.0,1],[2000.0,1],[5000.0,1]],
+                                "buckets":[[0.0,0],[1.0,0],[5.0,0],[10.0,0],[50.0,0],[100.0,0],[500.0,0],[1000.0,1],[5000.0,1],[50000.0,1]],
                                 "sum":1000.0,
                                 "count":1
                             },
@@ -378,11 +381,11 @@ mod tests {
             let dispatch = Dispatch::new(tracing_subscriber::Registry::default().with(metrics.clone()));
             async {
                 let hist = register_histogram!("test_histogram", "label" => "one", "two" => "another");
-                hist.record(9.0);
+                hist.record(Duration::from_millis(9));
 
                 absolute_counter!("counter_1", 1);
 
-                let mut global_labels: IndexMap<String, String> = IndexMap::new();
+                let mut global_labels: HashMap<String, String> = HashMap::new();
                 global_labels.insert("global_one".to_string(), "one".to_string());
                 global_labels.insert("global_two".to_string(), "two".to_string());
 
@@ -400,14 +403,14 @@ mod tests {
                         "key":"test_histogram",
                         "labels":{"label":"one","two":"another","global_one":"one","global_two":"two"},
                         "value":{
-                            "buckets": [[0.0,0],[1.0,0],[2.0,0],[5.0,0],[10.0,1],[20.0,1],[50.0,1],[100.0,1],[200.0,1],[500.0,1],[1000.0,1],[2000.0,1],[5000.0,1]],
+                            "buckets": [[0.0,0],[1.0,0],[5.0,0],[10.0,1],[50.0,1],[100.0,1],[500.0,1],[1000.0,1],[5000.0,1],[50000.0,1]],
                             "sum": 9.0,
                             "count": 1
                         },
                         "description":""
                     }]
                 });
-
+                println!("J {}", json);
                 assert_eq!(expected, json);
             }
             .with_subscriber(dispatch)
@@ -431,71 +434,65 @@ mod tests {
 
                 describe_histogram!("histogram_1", "a description for histogram");
                 let hist = register_histogram!("histogram_1", "label" => "one", "hist_two" => "two");
-                hist.record(9.0);
+                hist.record(Duration::from_millis(9));
 
-                histogram!("histogram_2", 1000.0);
+                histogram!("histogram_2", Duration::from_millis(1000));
 
-                let mut global_labels: IndexMap<String, String> = IndexMap::new();
-                global_labels.insert("global_one".to_string(), "one".to_string());
+                let mut global_labels: HashMap<String, String> = HashMap::new();
                 global_labels.insert("global_two".to_string(), "two".to_string());
+                global_labels.insert("global_one".to_string(), "one".to_string());
 
                 let prometheus = metrics.to_prometheus(global_labels);
-                let snapshot = expect_test::expect![[r#"
-                # HELP counter_1 
-                # TYPE counter_1 counter
-                counter_1{label="one",global_one="one",global_two="two"} 4
-                
-                # HELP counter_2 this is a description for counter 2
-                # TYPE counter_2 counter
-                counter_2{label="one",another_label="two",global_one="one",global_two="two"} 2
-                
-                # HELP gauge_1 a description for gauge 1
-                # TYPE gauge_1 gauge
-                gauge_1{global_one="one",global_two="two"} 7
-                
-                # HELP gauge_2 
-                # TYPE gauge_2 gauge
-                gauge_2{label="three",global_one="one",global_two="two"} 3
-                
-                # HELP histogram_1 a description for histogram
-                # TYPE histogram_1 histogram
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="0"} 0
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="1"} 0
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="2"} 0
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="5"} 0
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="10"} 1
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="20"} 1
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="50"} 1
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="100"} 1
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="200"} 1
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="500"} 1
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="1000"} 1
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="2000"} 1
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="5000"} 1
-                histogram_1_bucket{label="one",hist_two="two",global_one="one",global_two="two",le="+Inf"} 1
-                histogram_1_sum{label="one",hist_two="two",global_one="one",global_two="two"} 9
-                histogram_1_count{label="one",hist_two="two",global_one="one",global_two="two"} 1
-                
-                # HELP histogram_2 
-                # TYPE histogram_2 histogram
-                histogram_2_bucket{global_one="one",global_two="two",le="0"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="1"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="2"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="5"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="10"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="20"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="50"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="100"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="200"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="500"} 0
-                histogram_2_bucket{global_one="one",global_two="two",le="1000"} 1
-                histogram_2_bucket{global_one="one",global_two="two",le="2000"} 1
-                histogram_2_bucket{global_one="one",global_two="two",le="5000"} 1
-                histogram_2_bucket{global_one="one",global_two="two",le="+Inf"} 1
-                histogram_2_sum{global_one="one",global_two="two"} 1000
-                histogram_2_count{global_one="one",global_two="two"} 1
-                
-                "#]];
+                let snapshot = expect_test::expect![[r##"
+                    # HELP counter_1 
+                    # TYPE counter_1 counter
+                    counter_1{global_one="one",global_two="two",label="one"} 4
+
+                    # HELP counter_2 this is a description for counter 2
+                    # TYPE counter_2 counter
+                    counter_2{another_label="two",global_one="one",global_two="two",label="one"} 2
+
+                    # HELP gauge_1 a description for gauge 1
+                    # TYPE gauge_1 gauge
+                    gauge_1{global_one="one",global_two="two"} 7
+
+                    # HELP gauge_2 
+                    # TYPE gauge_2 gauge
+                    gauge_2{global_one="one",global_two="two",label="three"} 3
+
+                    # HELP histogram_1 a description for histogram
+                    # TYPE histogram_1 histogram
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="0"} 0
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="1"} 0
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="5"} 0
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="10"} 1
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="50"} 1
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="100"} 1
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="500"} 1
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="1000"} 1
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="5000"} 1
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="50000"} 1
+                    histogram_1_bucket{global_one="one",global_two="two",hist_two="two",label="one",le="+Inf"} 1
+                    histogram_1_sum{global_one="one",global_two="two",hist_two="two",label="one"} 9
+                    histogram_1_count{global_one="one",global_two="two",hist_two="two",label="one"} 1
+
+                    # HELP histogram_2 
+                    # TYPE histogram_2 histogram
+                    histogram_2_bucket{global_one="one",global_two="two",le="0"} 0
+                    histogram_2_bucket{global_one="one",global_two="two",le="1"} 0
+                    histogram_2_bucket{global_one="one",global_two="two",le="5"} 0
+                    histogram_2_bucket{global_one="one",global_two="two",le="10"} 0
+                    histogram_2_bucket{global_one="one",global_two="two",le="50"} 0
+                    histogram_2_bucket{global_one="one",global_two="two",le="100"} 0
+                    histogram_2_bucket{global_one="one",global_two="two",le="500"} 0
+                    histogram_2_bucket{global_one="one",global_two="two",le="1000"} 1
+                    histogram_2_bucket{global_one="one",global_two="two",le="5000"} 1
+                    histogram_2_bucket{global_one="one",global_two="two",le="50000"} 1
+                    histogram_2_bucket{global_one="one",global_two="two",le="+Inf"} 1
+                    histogram_2_sum{global_one="one",global_two="two"} 1000
+                    histogram_2_count{global_one="one",global_two="two"} 1
+
+                "##]];
 
                 snapshot.assert_eq(&prometheus);
             }

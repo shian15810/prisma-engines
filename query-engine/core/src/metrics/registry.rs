@@ -1,23 +1,3 @@
-use indexmap::IndexMap;
-use metrics::{CounterFn, GaugeFn, HistogramFn, Key};
-use metrics_util::{
-    registry::{GenerationalAtomicStorage, GenerationalStorage, Registry},
-    Histogram as HistogramUtil,
-};
-use parking_lot::RwLock;
-use std::fmt;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::{collections::HashMap, time::Duration};
-
-use tracing::{
-    field::{Field, Visit},
-    Subscriber,
-};
-use tracing_subscriber::Layer;
-
-use serde_json::Value;
-
 use super::formatters::metrics_to_json;
 use super::{
     common::{KeyLabels, Metric, MetricAction, MetricType, MetricValue, Snapshot},
@@ -26,6 +6,22 @@ use super::{
 use super::{
     ACCEPT_LIST, HISTOGRAM_BOUNDS, METRIC_COUNTER, METRIC_DESCRIPTION, METRIC_GAUGE, METRIC_HISTOGRAM, METRIC_TARGET,
 };
+use metrics::{CounterFn, GaugeFn, HistogramFn, Key};
+use metrics_util::{
+    registry::{GenerationalAtomicStorage, GenerationalStorage, Registry},
+    Histogram as HistogramUtil,
+};
+use parking_lot::RwLock;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::fmt;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tracing::{
+    field::{Field, Visit},
+    Subscriber,
+};
+use tracing_subscriber::Layer;
 
 struct Inner {
     descriptions: RwLock<HashMap<String, String>>,
@@ -150,7 +146,7 @@ impl MetricRegistry {
         descriptions.clone()
     }
 
-    fn get_snapshot(&self, global_labels: IndexMap<String, String>) -> Snapshot {
+    fn get_snapshot(&self, global_labels: HashMap<String, String>) -> Snapshot {
         let counter_handles = self.inner.register.get_counter_handles();
         let gauge_handles = self.inner.register.get_gauge_handles();
         let histogram_handles = self.inner.register.get_histogram_handles();
@@ -207,12 +203,12 @@ impl MetricRegistry {
         }
     }
 
-    pub fn to_json(&self, global_labels: IndexMap<String, String>) -> Value {
+    pub fn to_json(&self, global_labels: HashMap<String, String>) -> Value {
         let metrics = self.get_snapshot(global_labels);
         metrics_to_json(metrics)
     }
 
-    pub fn to_prometheus(&self, global_labels: IndexMap<String, String>) -> String {
+    pub fn to_prometheus(&self, global_labels: HashMap<String, String>) -> String {
         let metrics = self.get_snapshot(global_labels);
         metrics_to_prometheus(metrics)
     }

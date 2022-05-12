@@ -1,15 +1,20 @@
 use super::common::{MetricValue, Snapshot};
-use indexmap::IndexMap;
 use metrics_exporter_prometheus::formatting::{
     sanitize_description, sanitize_label_key, sanitize_label_value, write_help_line, write_metric_line, write_type_line,
 };
 use serde_json::Value;
+use std::collections::HashMap;
 
-fn create_label_string(labels: &IndexMap<String, String>) -> Vec<String> {
-    labels
+fn create_label_string(labels: &HashMap<String, String>) -> Vec<String> {
+    let mut label_string = labels
         .iter()
         .map(|(k, v)| format!("{}=\"{}\"", sanitize_label_key(k), sanitize_label_value(v)))
-        .collect()
+        .collect::<Vec<String>>();
+
+    // This sort isn't strictly needed but adds a predictable set order of labels which makes testing easier but
+    // should also be better for our users
+    label_string.sort();
+    label_string
 }
 
 pub(crate) fn metrics_to_json(snapshot: Snapshot) -> Value {

@@ -1,11 +1,12 @@
-use indexmap::IndexMap;
+use std::collections::HashMap;
+
 use metrics::{Key, Label};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct KeyLabels {
     name: String,
-    labels: IndexMap<String, String>,
+    labels: HashMap<String, String>,
 }
 
 #[derive(Debug)]
@@ -45,19 +46,19 @@ pub(crate) enum MetricValue {
 #[derive(Serialize)]
 pub(crate) struct Metric {
     pub key: String,
-    pub labels: IndexMap<String, String>,
+    pub labels: HashMap<String, String>,
     pub value: MetricValue,
     pub description: String,
 }
 
 impl Metric {
-    pub fn new(key: Key, description: String, value: MetricValue, global_labels: IndexMap<String, String>) -> Self {
+    pub fn new(key: Key, description: String, value: MetricValue, global_labels: HashMap<String, String>) -> Self {
         let (name, labels) = key.into_parts();
 
-        let mut labels_map = labels.into_iter().fold(IndexMap::new(), |mut map, label| {
-            map.insert(label.key().to_string(), label.value().to_string());
-            map
-        });
+        let mut labels_map: HashMap<String, String> = labels
+            .into_iter()
+            .map(|label| (label.key().to_string(), label.value().to_string()))
+            .collect();
 
         labels_map.extend(global_labels);
 
@@ -83,12 +84,11 @@ impl From<Key> for KeyLabels {
     fn from(key: Key) -> Self {
         let mut kl = KeyLabels {
             name: key.name().to_string(),
-            labels: IndexMap::new(),
+            labels: Default::default(),
         };
 
-        key.labels().for_each(|label| {
-            kl.labels.insert(label.key().to_string(), label.value().to_string());
-        });
+        kl.labels
+            .extend(key.labels().map(|l| (l.key().to_string(), l.value().to_string())));
 
         kl
     }

@@ -244,7 +244,7 @@ fn playground_handler() -> Response<Body> {
 async fn handle_metrics(state: State, req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     if let Some(query) = req.uri().query() {
         if query.contains("format=json") {
-            let metrics = state.cx.metrics.to_json(indexmap::IndexMap::default());
+            let metrics = state.cx.metrics.to_json(Default::default());
 
             let res = Response::builder()
                 .status(StatusCode::OK)
@@ -256,7 +256,7 @@ async fn handle_metrics(state: State, req: Request<Body>) -> Result<Response<Bod
         }
     }
 
-    let metrics = state.cx.metrics.to_prometheus(indexmap::IndexMap::default());
+    let metrics = state.cx.metrics.to_prometheus(Default::default());
 
     let res = Response::builder()
         .status(StatusCode::OK)
