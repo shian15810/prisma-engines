@@ -7,7 +7,7 @@
 //! The Metric Recorder is called with `register_gauge` and returns a `MetricHandle`. The `MetricHandle` will convert
 //! ``gauge_increment!("my_gauge", 1.0)` into a `trace!` message.
 //!
-//! The trace message received my the `MetricRegistry` and converted into a `MetricVisitor` with all the information required
+//! The trace message is received by the `MetricRegistry` and converted into a `MetricVisitor` with all the information required
 //! to record the metric and the value. The MetricVisitor is then processed and the metric value added to the `Registry`.
 //!
 //! To view the recorded metrics we create a `Snapshot` of our metrics and then return it in `json` format.
