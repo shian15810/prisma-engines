@@ -111,7 +111,7 @@ impl MetricRegistry {
             .register
             .get_or_create_histogram(&metric.name, |c| match metric.action {
                 // We multiply by 1000 here because the value is converted into seconds when doing:
-                // histogram!("my_histogram", duration.elapsted());
+                // histogram!("my_histogram", duration.elapsed());
                 // and we want it in ms
                 MetricAction::HistRecord(val) => HistogramFn::record(c, val * 1000.0),
                 _ => (),
